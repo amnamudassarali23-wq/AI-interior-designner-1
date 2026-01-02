@@ -1,58 +1,58 @@
 import streamlit as st
-import requests
-import io
-import time
-from PIL import Image
+from openai import OpenAI
 
-st.set_page_config(page_title="Final AI Lab", layout="wide")
+# 1. Setup OpenAI Client using your Streamlit Secrets
+# This looks for the "OPENAI_API_KEY" you pasted in the Secrets dashboard
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# 1. THE TOKEN (Make sure it has "Read" permissions)
-HF_TOKEN = "your_hf_token_here" 
+st.set_page_config(page_title="AI Interior Designer", layout="wide")
 
-# 2. THE NEW API URL (SD3 is much more reliable against 410 errors)
-API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-3-medium-diffusers"
-headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+st.title("🏡 Smart AI Interior Designer")
+st.write("Fill in your requirements below to generate a professional room design.")
 
-def query_model(prompt_text):
-    # Added 'wait_for_model' to force the server to handle the loading
-    payload = {
-        "inputs": prompt_text,
-        "options": {"wait_for_model": True, "use_cache": False}
-    }
-    try:
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
-        if response.status_code == 200:
-            return response.content
-        else:
-            return f"ERROR_{response.status_code}"
-    except:
-        return "TIMEOUT"
-
-# --- UI ---
-st.title("🏠 AI Interior Design Studio")
-
+# --- SIDEBAR INPUTS ---
 with st.sidebar:
-    room = st.selectbox("Room", ["Living Room", "Bedroom"])
-    style = st.selectbox("Style", ["Modern", "Minimalist"])
-    color = st.color_picker("Color", "#3498db")
-    run_btn = st.button("Generate Now")
+    st.header("📌 Room Specifications")
+    
+    room_name = st.text_input("Room Name (e.g., Master Bedroom, Gaming Studio)", "Modern Living Room")
+    
+    room_shape = st.selectbox("Room Shape", 
+                              ["Rectangular", "Square", "L-Shaped", "Open Plan", "Circular"])
+    
+    budget = st.select_slider("Budget Level", 
+                              options=["Low Budget", "Standard", "Premium", "Ultra-Luxury"])
+    
+    primary_color = st.color_picker("Choose Theme Color", "#3498db")
+    
+    st.divider()
+    generate_btn = st.button("Generate My Design ✨")
 
-if run_btn:
-    prompt = f"Professional interior design, {style} {room}, {color} accents, high quality"
-    with st.spinner("Model is inferencing..."):
-        result = query_model(prompt)
-        
-        if isinstance(result, bytes):
-            image = Image.open(io.BytesIO(result))
-            st.image(image, use_container_width=True)
-            st.success("Generation Complete!")
-        else:
-            st.error(f"Inference Error: {result}")
-            st.info("If 410 persists, the Hugging Face free tier for this model is temporarily down. Use the 'Manual Blueprint' fallback below for your presentation.")
+# --- MAIN LOGIC ---
+if generate_btn:
+    # Constructing a detailed prompt using your inputs
+    # The prompt engineering here ensures the AI understands "Budget" and "Shape"
+    prompt = (
+        f"A professional photorealistic interior design of a {room_shape} {room_name}. "
+        f"The design should strictly follow a {budget} style with a color palette "
+        f"centered around {primary_color}. High-end lighting, detailed textures, 8k resolution."
+    )
+    
+    with st.spinner(f"Creating your {budget} {room_name}..."):
+        try:
+            # Calling DALL-E 3
+            response = client.images.generate(
+                model="dall-e-3",
+                prompt=prompt,
+                n=1,
+                size="1024x1024"
+            )
             
-            # --- 3. THE EMERGENCY FALLBACK (SAVES YOUR PRESENTATION) ---
-            from PIL import ImageDraw
-            fallback = Image.new('RGB', (800, 400), color=color)
-            draw = ImageDraw.Draw(fallback)
-            draw.text((300, 180), f"{style} {room} Plan", fill="white")
-            st.image(fallback, caption="AI Schematic (Fallback Mode)")
+            # Display the result
+            image_url = response.data[0].url
+            st.subheader(f"✅ Generated Design: {room_name}")
+            st.image(image_url, use_column_width=True)
+            st.success("Design complete! You can right-click the image to save it.")
+            
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
+            st.info("Tip: Ensure your OpenAI API key has enough credits.")
